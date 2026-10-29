@@ -14,4 +14,4 @@ description: 还原需求背后的真实问题，识别被方案包装的问题�
 - 回到微信式的克制：先问是否值得做、能否用更少概念解决，再扩展方案空间。
 - 根据问题自然表达。可能只需要一句重述，也可能需要列出几条待验证判断；不要固定套栏目。
 
-重构需要从对人的看见出发时，读 `references/human-lens.md`；需要识别问题的类型或严格检查一个论证时，读 `references/logic-lens.md`；需要把一个方向写成可推进的学习计划时，读 `references/learning-plan.md`；需要参考用户亲自整理的案例或完整推演示例时，读 `references/cases.md`。
+问题重构需要从思考人的需求出发时，读 `references/human-lens.md`；需要识别问题的类型或严格检查一个论证时，读 `references/logic-lens.md`；需要把一个方向写成可推进的学习计划时，读 `references/learning-plan.md`；需要参考用户亲自整理的案例或完整推演示例时，读 `references/cases.md`。

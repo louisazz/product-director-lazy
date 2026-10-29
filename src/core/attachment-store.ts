@@ -27,6 +27,7 @@ export type StoredProjectFile = StoredFileMeta & {
 
 const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 const TEXT_MIMES = new Set(["text/plain", "text/markdown"]);
+export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 export function isImageAttachment(attachment: Pick<AttachmentRef, "mimeType" | "kind">): boolean {
   return attachment.kind === "image" || IMAGE_MIMES.has(attachment.mimeType);
@@ -122,6 +123,7 @@ export async function storeProjectAttachment(
     const result = await preparePdfBundle(originalPath, bundleDir);
     pageCount = result.pageCount;
   }
+  if (detected.mimeType === DOCX_MIME) await prepareDocxText(originalPath, bundleDir);
 
   const name = safeDisplayName(incoming.name, detected.extension);
   const metaPath = path.join(bundleDir, "meta.json");
@@ -187,6 +189,11 @@ export function hydrateAttachment(
   }
   if (TEXT_MIMES.has(attachment.mimeType)) {
     return { ...attachment, extractedText: fs.readFileSync(originalPath, "utf8") };
+  }
+  if (attachment.mimeType === DOCX_MIME) {
+    try {
+      return { ...attachment, extractedText: fs.readFileSync(path.join(path.dirname(originalPath), "text.txt"), "utf8") };
+    } catch {}
   }
   return { ...attachment };
 }
@@ -332,7 +339,26 @@ function detectAttachment(bytes: Buffer, declaredMime?: string, name?: string): 
   const lowerName = String(name || "").toLowerCase();
   if (declaredMime === "text/markdown" || /\.md$/.test(lowerName)) return { mimeType: "text/markdown", extension: "md" };
   if (declaredMime === "text/plain" || /\.txt$/.test(lowerName)) return { mimeType: "text/plain", extension: "txt" };
-  throw new Error("暂时只支持 PNG、JPEG、GIF、WebP、PDF、TXT 和 Markdown 文件。");
+  const zip = bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+  if (zip && (declaredMime === DOCX_MIME || /\.docx$/.test(lowerName))) return { mimeType: DOCX_MIME, extension: "docx" };
+  if (/\.doc$/.test(lowerName) || declaredMime === "application/msword") throw new Error("暂不支持旧版 .doc 文件，请在 Word 中另存为 .docx 后再上传。");
+  throw new Error("暂时只支持 PNG、JPEG、GIF、WebP、PDF、Word（.docx）、TXT 和 Markdown 文件。");
+}
+
+// Word text is extracted once at upload, like the PDF text.json, so hydration
+// and the project-file catalog can read it synchronously.
+async function prepareDocxText(originalPath: string, bundleDir: string): Promise<void> {
+  const textPath = path.join(bundleDir, "text.txt");
+  if (fs.existsSync(textPath)) return;
+  const mammoth = await import("mammoth");
+  let result: { value: string };
+  try {
+    result = await mammoth.extractRawText({ path: originalPath });
+  } catch {
+    throw new Error("无法读取这个 Word 文件，请确认它是有效的 .docx。");
+  }
+  const text = result.value.replace(/\n{3,}/g, "\n\n").trim();
+  writeFileAtomic(textPath, Buffer.from(text, "utf8"));
 }
 
 async function preparePdfBundle(originalPath: string, bundleDir: string): Promise<{ pageCount: number }> {
@@ -397,6 +423,7 @@ function extensionFromMime(mimeType: string): string {
   if (mimeType === "application/pdf") return "pdf";
   if (mimeType === "text/markdown") return "md";
   if (mimeType === "text/plain") return "txt";
+  if (mimeType === DOCX_MIME) return "docx";
   return "png";
 }
 

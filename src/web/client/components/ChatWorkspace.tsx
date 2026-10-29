@@ -83,6 +83,8 @@ export function ChatWorkspace(props: Props) {
   const [annotationTrayOpen, setAnnotationTrayOpen] = useState(false);
   const [draftAttachments, setDraftAttachments] = useState<ImageAttachmentRef[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
+  const [fileDragActive, setFileDragActive] = useState(false);
+  const fileDragDepthRef = useRef(0);
   const [forkingTurnIndex, setForkingTurnIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const draftAttachmentsRef = useRef<ImageAttachmentRef[]>([]);
@@ -354,7 +356,7 @@ export function ChatWorkspace(props: Props) {
   }, []);
 
   const addAttachmentFiles = useCallback(async (files: FileList | File[]) => {
-    const allowed = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "text/plain", "text/markdown"]);
+    const allowed = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", DOCX_MIME, "text/plain", "text/markdown"]);
     const candidates = Array.from(files);
     if (!candidates.length) return;
     if (!providerAcceptsImages(modelCatalogRef.current, props.provider)) {
@@ -368,7 +370,9 @@ export function ChatWorkspace(props: Props) {
     for (const file of candidates) {
       const normalizedType = normalizeBrowserMime(file);
       if (!allowed.has(normalizedType)) {
-        setAttachmentError("支持 PNG、JPEG、GIF、WebP、PDF、TXT 和 Markdown 文件。");
+        setAttachmentError(/\.doc$/i.test(file.name)
+          ? "暂不支持旧版 .doc 文件，请在 Word 中另存为 .docx 后再上传。"
+          : "支持 PNG、JPEG、GIF、WebP、PDF、Word（.docx）、TXT 和 Markdown 文件。");
         return;
       }
       if (file.size > 64 * 1024 * 1024) {
@@ -426,6 +430,17 @@ export function ChatWorkspace(props: Props) {
       setAttachmentError((error as Error).message || "附件上传失败。");
     }
   }, [props.projectId, props.provider, queryClient]);
+
+  // A file dropped outside the drop target would make the browser navigate to
+  // it and discard the conversation, so swallow stray file drops page-wide.
+  useEffect(() => {
+    const guard = (event: DragEvent) => {
+      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+    };
+    window.addEventListener("dragover", guard);
+    window.addEventListener("drop", guard);
+    return () => { window.removeEventListener("dragover", guard); window.removeEventListener("drop", guard); };
+  }, []);
 
   const removeDraftAttachment = useCallback((id: string) => {
     setDraftAttachments((current) => {
@@ -573,7 +588,37 @@ export function ChatWorkspace(props: Props) {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <div className="chat-workspace" ref={workspaceRef}>
+      <div
+        className={`chat-workspace${fileDragActive ? " is-file-dragging" : ""}`}
+        ref={workspaceRef}
+        onDragEnter={(event) => {
+          if (!event.dataTransfer.types.includes("Files")) return;
+          fileDragDepthRef.current += 1;
+          setFileDragActive(true);
+        }}
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes("Files")) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        }}
+        onDragLeave={(event) => {
+          if (!event.dataTransfer.types.includes("Files")) return;
+          fileDragDepthRef.current = Math.max(0, fileDragDepthRef.current - 1);
+          if (!fileDragDepthRef.current) setFileDragActive(false);
+        }}
+        onDrop={(event) => {
+          fileDragDepthRef.current = 0;
+          setFileDragActive(false);
+          if (!event.dataTransfer.files.length) return;
+          event.preventDefault();
+          void addAttachmentFiles(event.dataTransfer.files);
+        }}
+      >
+        {fileDragActive && <div className="file-drop-overlay" aria-hidden="true">
+          <Paperclip size={26} />
+          <strong>{activeAcceptsImages ? "松开即可添加附件" : "当前模型不支持附件"}</strong>
+          <span>图片、PDF、Word（.docx）、TXT、Markdown</span>
+        </div>}
         <ThreadPrimitive.Root className="thread-root">
           <ThreadPrimitive.Viewport className="thread-viewport" turnAnchor="bottom" autoScroll>
             <AuiIf condition={(state) => state.thread.isEmpty}>
@@ -652,12 +697,6 @@ export function ChatWorkspace(props: Props) {
                 <AttachmentMentionPopover attachments={projectReferenceAttachments} trigger="@@@" scope="project" currentSessionId={props.sessionId} onInserted={rememberRecalledAttachment} />
                 <ComposerPrimitive.Root
                   className="composer-root"
-                  onDragOver={(event) => { if (activeAcceptsImages) event.preventDefault(); }}
-                  onDrop={(event) => {
-                    if (!event.dataTransfer.files.length) return;
-                    event.preventDefault();
-                    void addAttachmentFiles(event.dataTransfer.files);
-                  }}
                 >
                   {/* Lexical owns caret-aware inline directives; the runtime text
                       remains the durable source used for drafts and submission. */}
@@ -689,7 +728,7 @@ export function ChatWorkspace(props: Props) {
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown,.md,.txt,.pdf"
+                        accept={`image/png,image/jpeg,image/gif,image/webp,application/pdf,${DOCX_MIME},text/plain,text/markdown,.md,.txt,.pdf,.docx`}
                         multiple
                         hidden
                         onChange={(event) => {
@@ -1294,8 +1333,11 @@ function normalizeBrowserMime(file: File): string {
   if (lower.endsWith(".pdf")) return "application/pdf";
   if (lower.endsWith(".md")) return "text/markdown";
   if (lower.endsWith(".txt")) return "text/plain";
+  if (lower.endsWith(".docx")) return DOCX_MIME;
   return "application/octet-stream";
 }
+
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 function assignStableAttachmentLabels(
   attachments: ImageAttachmentRef[],

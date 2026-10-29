@@ -129,6 +129,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .workspace-layer.is-active { visibility: visible; }
 
 .chat-workspace, .thread-root, .thread-viewport { width: 100%; height: 100%; min-height: 0; }
+.chat-workspace { position: relative; }
+.file-drop-overlay { position: absolute; inset: 12px; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 2px dashed var(--accent); border-radius: 18px; background: color-mix(in srgb, var(--accent-soft) 88%, transparent); color: var(--accent); pointer-events: none; }
+.file-drop-overlay strong { font-size: 16px; color: var(--text); }
+.file-drop-overlay span { font-size: var(--font-small); color: var(--muted); }
 .thread-viewport { overflow-y: auto; display: flex; flex-direction: column; scrollbar-gutter: stable; overflow-anchor: none; }
 .thread-viewport > * { flex-shrink: 0; }
 .thread-viewport > [data-radix-scroll-area-viewport] { min-height: 0; }

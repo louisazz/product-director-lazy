@@ -8,6 +8,9 @@ import { mapMessagesToOpenAI, mapToolsToOpenAI } from "./message-mapper.js";
 // callers can still override this per request.
 const DEFAULT_MAX_TOKENS = 32_768;
 
+// DeepSeek V4 accepts low / high / max; the API default is high.
+const DEFAULT_REASONING_EFFORT = "max";
+
 export interface DeepSeekProviderOptions {
   apiKey: string;
   baseURL?: string;
@@ -15,6 +18,7 @@ export interface DeepSeekProviderOptions {
   providerName?: string;
   acceptsImages?: boolean;
   embeddingModel?: string;
+  reasoningEffort?: "low" | "high" | "max";
 }
 
 export class DeepSeekProvider implements ModelProvider {
@@ -24,6 +28,7 @@ export class DeepSeekProvider implements ModelProvider {
   private client: OpenAI;
   private model: string;
   private embeddingModel: string;
+  private reasoningEffort: "low" | "high" | "max";
 
   constructor(options: DeepSeekProviderOptions) {
     this.client = new OpenAI({
@@ -37,6 +42,7 @@ export class DeepSeekProvider implements ModelProvider {
     ].includes(this.model);
     this.name = options.providerName ?? (this.acceptsImages ? "deepseek-vision" : "deepseek-pro");
     this.embeddingModel = options.embeddingModel ?? "deepseek-embed";
+    this.reasoningEffort = options.reasoningEffort ?? DEFAULT_REASONING_EFFORT;
   }
 
   async generate(request: ModelRequest): Promise<ModelResponse> {
@@ -52,6 +58,8 @@ export class DeepSeekProvider implements ModelProvider {
       tools,
       // DeepSeek V4 thinking mode supports tools but rejects tool_choice.
       ...(maxTokens ? { max_tokens: maxTokens } : {}),
+      // The OpenAI SDK type has no "max"; DeepSeek accepts it.
+      reasoning_effort: this.reasoningEffort as OpenAI.ReasoningEffort,
     }, { signal: request.signal });
 
     const choice = completion.choices[0];
@@ -103,6 +111,8 @@ export class DeepSeekProvider implements ModelProvider {
       stream: true,
       stream_options: { include_usage: true },
       ...(maxTokens ? { max_tokens: maxTokens } : {}),
+      // The OpenAI SDK type has no "max"; DeepSeek accepts it.
+      reasoning_effort: this.reasoningEffort as OpenAI.ReasoningEffort,
     }, { signal: request.signal });
 
     let accumulatedContent = "";

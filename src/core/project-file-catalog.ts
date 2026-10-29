@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { WorkspaceContext } from "./types.js";
-import { listStoredProjectFiles, type StoredProjectFile } from "./attachment-store.js";
+import { DOCX_MIME, listStoredProjectFiles, type StoredProjectFile } from "./attachment-store.js";
 
 export const PROJECT_FILE_HANDLE_PREFIX = "project-file:";
 
@@ -15,12 +15,14 @@ export function listProjectFileCatalog(workspace: WorkspaceContext): ProjectFile
   return listStoredProjectFiles(workspace).map((file) => {
     const sourcePath = file.mimeType === "application/pdf"
       ? path.join(path.dirname(file.originalPath), "text.json")
-      : file.originalPath;
+      : file.mimeType === DOCX_MIME
+        ? path.join(path.dirname(file.originalPath), "text.txt")
+        : file.originalPath;
     return {
       ...file,
       handle: `${PROJECT_FILE_HANDLE_PREFIX}${file.fileId}`,
       sourcePath,
-      readable: file.mimeType === "application/pdf" || file.mimeType === "text/plain" || file.mimeType === "text/markdown",
+      readable: file.mimeType === "application/pdf" || file.mimeType === DOCX_MIME || file.mimeType === "text/plain" || file.mimeType === "text/markdown",
     };
   });
 }
@@ -59,7 +61,9 @@ export function describeProjectFile(file: ProjectFileCatalogItem): string {
     ? `PDF${file.pageCount ? `，${file.pageCount} 页` : ""}`
     : file.mimeType.startsWith("image/")
       ? "图片"
-      : file.mimeType === "text/markdown"
+      : file.mimeType === DOCX_MIME
+        ? "Word 文档"
+        : file.mimeType === "text/markdown"
         ? "Markdown"
         : file.mimeType === "text/plain"
           ? "文本"
