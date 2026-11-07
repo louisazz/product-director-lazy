@@ -23,7 +23,7 @@ macOS 双击 `打开 Lazy.command`；Windows 双击 `start-web.bat`。Windows �
 
 ```
 src/
-  core/          Agent 循环、上下文组装、会话、语义索引、权限
+  core/          Agent loop、上下文组装、会话、语义索引、权限
   model/         DeepSeek / Claude / OpenAI provider、模型目录、消息映射、本地 embedding（BGE-small-zh）
   tools/         内置只读工具
   skills/        Skill 加载（渐进披露：先注入名称+简介，用时才读全文）
